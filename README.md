@@ -3,3 +3,5 @@ je suis **NZIALI TCHAMOU Durel Valdes** eleve ingénieur en statistique économi
 ceci represente mon projet du cours de projet statistique avec R dispensé par **M Aboubacar Hema** 
 vous touverez si joint le lien de l'application R-shiny de la partie 3 du projet
 _ https://nziali-durel.shinyapps.io/Durel_Valdes_NZIALI_TCHAMOU/
+#
+notons que le format pdf est ecrit en mode Rapport et le .html est écrit pour facilité les présentations des graphes animés avec ggplot2 
