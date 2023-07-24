@@ -1,0 +1,13 @@
+name: Durel_Valdes_NZIALI_TCHAMOU
+title: Durel_Valdes_NZIALI_TCHAMOU
+username: nziali-durel
+account: nziali-durel
+server: shinyapps.io
+hostUrl: https://api.shinyapps.io/v1
+appId: 9497525
+bundleId: 7491289
+url: https://nziali-durel.shinyapps.io/Durel_Valdes_NZIALI_TCHAMOU/
+version: 1
+asMultiple: FALSE
+asStatic: FALSE
+ignoredFiles: assets/image1.jpg|assets/image2.png|assets/image3.png|Page_Garde.pdf|Page_Garde_Rshiny.pdf|Page_Garde1.pdf|Page_Garde2.pdf|projet_R.qmd|Projet_R_ISE_1.aux|Projet_R_ISE_1.pdf|Projet_R_ISE_1.Rmd|Projet_R_ISE_1.tex|Projet_R_ISE_1.toc

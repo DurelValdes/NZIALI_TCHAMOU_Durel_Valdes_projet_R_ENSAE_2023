@@ -1,0 +1,1105 @@
+---
+title: 'Travaux pratiques: cours de R'
+author: "NZIALI TCHAMOU Durel Valdes"
+date: "`r Sys.Date()`"
+format: pdf
+editor: visual
+toc: TRUE
+toc-depth: 6
+#output:
+#  pdf_document:
+#    toc: yes
+#    toc_depth: 4
+#    df_print: paged
+#  word_document:
+#    toc: yes
+#    toc_depth: '4'
+#  html_document:
+#    toc: yes
+#    toc_depth: '4'  
+reference-doc: 
+    Durel_Valdes_NZIALI_TCHAMOU.docx
+---
+
+\
+![](assets/image2.png)\
+\
+\
+
+![](assets/image3.png){width="731"}
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, error = FALSE,message = FALSE)
+```
+
+#### Importation des libraries necessaires
+
+```{r,warning = FALSE}
+library(readxl)
+library(dplyr)
+library(questionr)
+library(gtsummary)
+library(gt)
+library(webshot)
+library(ggplot2)
+library(sf)
+library(ggpubr)
+library(ggspatial)
+library(datawizard)
+library(kableExtra)
+library(janitor)
+library(flextable)
+
+library(htmlwidgets)
+library(webshot)
+library(knitr)
+library(lubridate)
+library(gridExtra)
+library(ggExtra)
+```
+
+# Partie 1
+
+## 1. Préparation des données
+
+### 1.1. Description
+
+Une description exhaustive des variables a été faite dans le document soumit à notre analyse.
+
+### 1.2. Importation et mise en forme
+
+-   Importer la base de données dans un objet de type ***data.frame*** nommé ***projet***
+
+```{r}
+projet <- read_excel("data/Base_Partie 1.xlsx")
+
+```
+
+-   Observation préliminaire néccesaire qui porte sur l'analyse des doublons
+
+```{r}
+## vérifications des doublons
+
+projet %>% 
+  duplicated() %>% 
+    table() %>%
+       kbl()
+```
+
+il n y a pas de doublons
+
+-   Selection des variables mentionnées dans la section description.
+
+```{r}
+
+```
+
+Il est important de noté que notre base ne contient que des variables décrites dans la section de description.
+
+-   Visualisation graphique d'un résumé des valeurs manquantes par variable
+
+```{r}
+#graphique des valeurs manquantes
+visdat::vis_miss(projet)
+```
+
+une premiere analyse serait de se dire que les Variables labelisés ***Autorisation de fabrication et de mise en vente** et* ***L'entreprise est-elle désservie par une route bitumée ?** ont chacune 1 valeur manquante. et que*  celles labelisés ***Etat de la route bitumée*** et ***l'état de la piste qui mène à l'entreprise** porte a elle deux près de 52% et 48% des valeurs manquantes respectivement.\
+Cependant,* au regard de leur description de la base (q17=***Etat de la route bitumée*** et q19=***l'état de la piste qui mène à l'entreprise***) présentent ***des hors champs et non des valeurs manquantes***.
+
+-   Présentation sous forme de tableau un résumé des valeurs manquantes par variable
+
+```{r}
+# Calculer le nombre de valeurs manquantes par variable
+
+projet %>%
+    is.na() %>%                # Detection des valeurs manquantes
+      colSums() %>%            # sommes des vqleurs pqr colonne
+         sort(decreasing = TRUE) %>% # ranger par ordre décroissant
+            as.data.frame() %>%
+              setNames("valeurs_manquantes") %>%  # donner un nom a la colonne du dataframe
+                mutate(pourcentage = round(valeurs_manquantes / sum(valeurs_manquantes, na.rm = TRUE) * 100, 2)) %>%
+                  kbl() %>% 
+                    kable_paper(full_width = TRUE)%>%
+                      row_spec(1:3, background = "red") %>% 
+                        row_spec(3:4, background = "lightblue")
+
+  
+
+```
+
+Ce tableau vient confirmer les analyses faites plus hauts sur le concept de valeur manquante et de hors champs.
+
+\
+***Note :*** le faite de colorier les 4 premieres lignes est la pour faciliter la présentation des données puisque avec l'observation graphique précédente on avait déjà une vision exhaustive de ce qui etait cherché
+
+-   Vérification s'il y a des valeurs manquantes pour la variable key dans la base projet. Si c'est effectivement le cas , l'on identifira la (ou les) PME concernée(s).
+
+```{r}
+
+projet %>% 
+  filter(is.na(key)) %>% 
+       kbl() %>% 
+         kable_paper(full_width = TRUE)
+
+
+```
+
+D'après le point précédent, la variable key n'a pas de valeurs manquantes.
+
+### 1.3. Création de variables
+
+-   Rénommer les variables q1 en *region* , q2 en *departement* et q23 en *sexe*.
+
+```{r}
+
+# Renommer les variables q1, q2 et q23
+projet <- projet %>%
+              rename(region = q1, departement = q2, sexe = q23)
+
+```
+
+-   Créer la variable sexe_2 qui vaut 1 si sexe égale à Femme et 0 sinon.
+
+```{r}
+# Créer la variable sexe_2
+projet <- projet %>% 
+              mutate(sexe_2=ifelse(projet$sexe == "Femme", 1, 0) )
+
+```
+
+-   Créer un data.frame nommé langues qui prend les variables key et les variables correspondantes décrites plus haut. Indication: Vous remarquerez que ces variables commencent par q24a\_.
+
+```{r}
+#Créer le dataframe langues
+langues<-projet %>% 
+            select(key, starts_with("q24a_"))
+```
+
+-   Créer une variable parle qui est égale au nombre de langue parlée par le dirigeant de la PME.
+
+```{r}
+# Créer la variable "parle" en calculant la somme des réponses
+langues <- langues %>% 
+                mutate(parle = rowSums(select(., starts_with("q24a_"))))
+
+
+```
+
+-   Sélectionnez uniquement les variables key et parle, l'objet de retour sera langues.
+
+```{r}
+langues <- langues %>% 
+                select(key, parle)
+```
+
+-   Merger les data.frame projet et langues
+
+```{r}
+projet<-merge(projet, langues,key_vars=key)
+
+```
+
+[**Note:**]{.underline} Cette partie sur la langue il etait aussi possible de le faire en ***une seule ligne de code***. le code reduit est donc\
+
+```{r}
+projet<-projet %>% 
+            mutate(parle2 = rowSums(select(., starts_with("q24a_"))))
+```
+
+## 2. Analyses descriptives
+
+### 2.1. Statistiques Descriptives Univariées
+
+#### 2.1.1. Tableaux statistiques
+
+Quelle est la répartion des PME suivant:
+
+-   le sexe?
+
+-   le niveau d'instruction?
+
+-   le statut juridique?
+
+-   le propriétaire/locataire?
+
+```{r, eval=FALSE}
+# Répartition des PME suivant ces variables
+tab2 =  projet %>%
+                  select(sexe, q25,q12,q81) %>%
+                      rename("Niveau d’instruction du dirigeant/responsable de la PME" = q25, "Statut juridique*"=q12, "*propriétaire ou locataire"=q81) %>% 
+                         tbl_summary()%>%
+                                modify_spanning_header(everything() ~ "**Répartition des PME selon les variables**") %>% 
+                                        bold_labels()
+
+tab2%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+             fontsize(size = 8)%>%
+                   width(width = 1.65) 
+
+
+
+```
+
+[***Commentaire :***]{.underline} La plupart des PME sont dans des GIE ou exercent dans le secteur informel. Les dirigeants des PME sont en majorité des propriétaires, environ 90%. On constate aussi que tres peu d'entre eux ont un niveau supérieur .une analyse par la filière nous donnera certainement plus de précision.\
+\
+Avant d'aller plus loin il est important de faire d'observer la repartition des PME par filière :
+
+```{r}
+# répartition des PME par filière
+tab3= projet %>%
+          select(starts_with("filiere_")) %>%
+               tbl_summary( missing = "no")%>% 
+                    bold_labels()
+
+tab3%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+
+```
+
+\
+Maintenant que nous savons la repartition des PME par filière, on se demande ce qu'il en est de la répartition des PME par nombre de filière dans laquelle agit les PME.
+
+```{r}
+
+# répartition des PME par nombre de filière dans laquelle agit les PME
+
+tab4 = projet %>% 
+             mutate(filiere = as.factor(rowSums(select(., starts_with("filiere_"))))) %>%           select(filiere) %>% 
+                       tbl_summary( missing = "no")%>% 
+                          bold_labels()
+
+tab4%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+
+
+```
+
+il ressort d'une analyse rapide que certains entreprises sont dans plusieurs filière à la fois. En effet **79** sont celles qui sont dans au moins une filière. L'analyse approfondie nous révèle que **59** d'entre elles sont dans deux ilières et une seule est dans quatre filières.\
+
+#### 2.1.2. Création d'une variable avec le nom des filières
+
+```{r}
+
+
+# creation d'une variable avec le nom des filière
+projet<- projet %>% 
+            mutate(filiere = as.factor(rowSums(select(., starts_with("filiere_")))),
+                    nom_filiere = case_when(
+                                      filiere == 1 & filiere_1==1~ "arachide",
+                                      filiere == 1 & filiere_2==1~ "anacarde",
+                                      filiere == 1 & filiere_3==1~ "mangue",
+                                      filiere == 1 & filiere_4==1~ "riz",
+                                      filiere == 2 & (filiere_1==1 & filiere_2==1) ~ "arachide & anacarde",
+                                      filiere == 2 & (filiere_1==1 & filiere_3==1) ~ "arachide & mangue",
+                                      filiere == 2 & (filiere_1==1 & filiere_4==1) ~ "arachide & riz",
+                                      filiere == 2 & (filiere_2==1 & filiere_3==1) ~ "mangue & anacarde",
+                                      filiere == 2 & (filiere_2==1 & filiere_4==1) ~ "riz & anacarde",
+                                      filiere == 2 & (filiere_3==1 & filiere_4==1) ~ "riz & mangue",
+                                      filiere == 3 & (filiere_1==1 & filiere_2==1 & filiere_3==1)~ "arachide & anacarde & mangue",
+                                      filiere == 3 & (filiere_1==1 & filiere_2==1 & filiere_4==1)~ "arachide & anacarde & riz",
+                                      filiere == 3 & (filiere_1==1 & filiere_4==1 & filiere_3==1)~ "arachide & riz & mangue",
+                                      filiere == 3 & (filiere_4==1 & filiere_2==1 & filiere_3==1)~ "riz & anacarde & mangue",
+                                      filiere == 4 & (filiere_1==1 &filiere_4==1 & filiere_2==1 & filiere_3==1)~ "arachide & anacarde & mangue& riz",
+                                      TRUE ~ "Autre"
+                                    ))
+```
+
+#### 2.1.3. Réprésentation graphique
+
+-   Répartition des PME selon le sexe
+
+```{r}
+#sexe
+
+# Répartition des PME selon le sexe
+pme_repartition <- projet %>%
+  select(sexe) %>%
+  count(sexe) %>%
+  mutate(percentage = n / sum(n) * 100)  # Calcul du pourcentage
+
+# Création du graphique en secteurs plein (pie chart) avec les pourcentages
+ggplot(pme_repartition, aes(x = "", y = n, fill = sexe)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_polar("y") +
+  scale_fill_manual(values = c("#E45756", "#4C78A8")) +  # Couleurs des secteurs (à personnaliser)
+  labs(x = NULL, y = NULL, fill = "Sexe") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), position = position_fill(vjust = 0.5), color = "white") +
+  theme_void()+
+  labs(title = "Répartition des PME selon le sexe du dirigeant")
+
+
+
+```
+
+-   Répartition des PME selon le niveau scolaire
+
+```{r}
+
+
+#q25
+
+
+# Répartition des PME selon le niveau scolaire
+pme_repartition <- projet %>%
+  select(q25) %>%
+  count(q25) %>%
+  mutate(percentage = n / sum(n) * 100)  # Calcul du pourcentage
+
+# Création du graphique en secteurs plein avec les pourcentages
+
+ggplot(pme_repartition, aes(x = "", y = n, fill = q25)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_polar("y") +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des secteurs (à personnaliser)
+  labs(x = NULL, y = NULL, fill = "niveau d'instruction") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), position = position_fill(vjust = 0.5), color = "white") +
+  theme_void()+
+  labs(title = "Répartition des PME selon le niveau d'instruction du dirigeant")
+
+```
+
+-   Répartition des PME selon le statut juridique
+
+```{r}
+#q12
+
+
+# Répartition des PME selon le statut juridique
+pme_repartition <- projet %>%
+  select(q12) %>%
+  count(q12) %>%
+  mutate(percentage = n / sum(n) * 100)  # Calcul du pourcentage
+
+# Création du diagramme en barres 
+
+ggplot(pme_repartition, aes(x = "", y = n, fill = q12)) +
+  geom_bar(stat = "identity") +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue","pink","lightgreen")) +  # Couleurs des barres (à personnaliser)
+  labs(x = NULL, y = NULL, fill = "Statut juridique") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), position = position_stack(vjust = 0.5), color = "white") +
+  theme_minimal() +
+  labs(title = "Répartition des PME selon le statut juridique")
+
+
+```
+
+-   Répartition des PME selon prop/locataire
+
+```{r}
+
+#Q81
+
+
+# Répartition des PME selon prop/locataire 
+pme_repartition <- projet %>%
+  select(q81) %>%
+  count(q81) %>%
+  mutate(percentage = n / sum(n) * 100)  # Calcul du pourcentage
+
+# Création du graphique en secteurs plein (pie chart) avec les pourcentages
+
+ggplot(pme_repartition, aes(x = "", y = n, fill = q81)) +
+  geom_bar(stat = "identity", position = "fill") +
+  coord_polar("y") +
+  scale_fill_manual(values = c("#E45756", "#4C78A8")) +  # Couleurs des secteurs (à personnaliser)
+  labs(x = NULL, y = NULL, fill = "type du dirigeant") +
+  geom_text(aes(label = paste0(round(percentage, 1), "%")), position = position_fill(vjust = 0.5), color = "white") +
+  theme_void()+
+  labs(title = "Répartition des PME selon le type du dirigeant")
+
+```
+
+### 2.2 statistiques descriptives bivariées
+
+#### 2.2.1. Tableaux statistiques
+
+-   le statut juridique et le sexe
+
+-   Niveau d'instruction du dirigeant/responsable de la PME et sexe
+
+-   propriétaire ou locataire et sexe
+
+```{r}
+
+# Répartition selon le statut juridique et le sexe,Niveau d'instruction du dirigeant/responsable de la PME et sexe, propriétaire ou locataire et sexe : profil colonne
+
+projet %>%
+     select(q81,q25,q12, sexe) %>%
+       rename("Niveau d’instruction du dirigeant/responsable de la PME" = q25, 
+         "Statut juridique*"=q12, "propriétaire ou locataire"=q81) %>% 
+            tbl_summary(by = sexe, missing = "no")%>%
+              modify_spanning_header(everything() ~ "**Répartition des PME selon leur statut juridique et le sexe de son dirigeant**")%>% 
+                   bold_labels()
+```
+
+[***Commentaire:***]{.underline}\
+\
+
+#### 2.2.2. Activité principale de l'entreprise par filière
+
+-   Activite principale de l'entreprise par rapport au filière
+
+```{r}
+#
+tab5=projet %>%
+    select(q8, starts_with("filiere_")) %>%
+      tbl_summary(by = q8, missing = "no")%>%
+        modify_spanning_header(everything() ~ "**Répartition des PME selon la filière et l'Activité principale de l’entreprise**")%>% 
+            bold_labels()
+
+
+
+tab5%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+-   Activité principale suivant les spécificités des filières
+
+```{r}
+
+
+#plus spécifiquement
+tab6=projet %>%
+  select(q8, nom_filiere) %>%
+     rename("Activité principale"=q8) %>% 
+       tbl_summary(by = nom_filiere, missing = "no")%>%
+       modify_spanning_header(everything() ~ "**Répartition des PME selon la filière et l'Activité principale de l’entreprise**")%>% 
+          bold_labels()
+
+
+tab6%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+#### 2.2.3. Analyse des langues parlées par les dirigeants de PME.
+
+-   Répartition des PME selon le nombre filiere suivant les langues parlées par dirigeant et Identification des langues les plus couramment utilisées
+
+```{r}
+##
+tab7=projet %>%
+  select(filiere, starts_with("q24a_")) %>%
+     rename("français"=q24a_1, "wolof"=q24a_2, "Diola"=q24a_3,"Serere"=q24a_4,
+            "Peul"=q24a_5,"Mandingue"=q24a_6,"Balante"=q24a_7,"Bambara"=q24a_9,
+            "autre langue"=q24a_10) %>% 
+    tbl_summary(by = filiere, missing = "no")%>%
+      modify_spanning_header(everything() ~ "**Répartition des PME selon le nombre  filiere suivant les langues parlées par dirigeant**")%>% 
+          bold_labels()
+
+tab7%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**MODALITE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+[***Commentaire***]{.underline} : il apparait que parmis les PME ou le dirgeant parle francais est centré au tour d'une seule filiere. il en est de meme pour le wolof qui est la lanque qui semble la plus representé chez les dirigeants des PME.\
+
+-   Identification du nombre de langues parlé par les dirigeants en fonction de leur nombre de filière.
+
+```{r}
+tab8=projet %>%
+  select(filiere, parle) %>%
+    tbl_summary(by = filiere, missing = "no")%>%
+       modify_spanning_header(everything() ~ "**Répartition des PME selon le nombre  filiere suivant le nombre de langues parlées par dirigeant**")%>% 
+          bold_labels()
+
+tab8%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**MODALITE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+-   Répartition Generales des PME selon le nombre filiere suivant le nombre de langues parlées par dirigeant
+
+```{r}
+
+tab9=projet %>%
+  select(nom_filiere,sexe,q25,q12,q81, parle, q8) %>%
+    rename("Niveau d’instruction du dirigeant/responsable de la PME" = q25, 
+         "Statut juridique*"=q12, "*propriétaire ou locataire"=q81, "Activité principale de l’entreprise"=q8) %>%
+      as.data.frame() %>%
+        tbl_summary(
+                    by = nom_filiere,
+                    percent = "row") %>%
+            add_stat_label(location = "column") %>%
+              add_n() %>%
+                add_overall(last = TRUE) %>% 
+                    modify_spanning_header(everything() ~ "**Répartition Generales des PME selon le nombre  filiere suivant le nombre de langues parlées par dirigeant**")%>% 
+                    bold_labels()
+
+tab9%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+
+```
+
+-   Un regard sur le **wolof**
+
+```{r}
+## regard sur le wolof
+tab10=projet %>%
+  select(nom_filiere, q24a_2) %>%
+    rename( "wolof"=q24a_2) %>% 
+      tbl_summary(by = nom_filiere, missing = "no")%>%
+          modify_spanning_header(everything() ~ "**Répartition des PME selon le nombre  filiere suivant le wolof**")%>% 
+              bold_labels()
+
+tab10%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+#### 2.2.4. Réprésentations graphiques
+
+Étudiez la répartition du sexe du dirigeant/responsable de la PME (variable q23) dans chaque filière pour évaluer les disparités éventuelles.
+
+-   Répartition du genre des dirigeants des PME en fonction du nombre de filières
+
+```{r}
+# ggplot code 
+ggplot(projet, aes(x = filiere, fill = sexe)) +
+  geom_bar(position = "fill") +
+  labs(x = "Filière", y = "Pourcentage", fill = "Sexe du dirigeant") +
+  scale_fill_manual(values = c("#E45756", "#4C78A8"), labels = c("Femme", "Homme")) +
+  theme_minimal() +
+  labs(title = "Répartition du genre des dirigeants des PME en fonction du nombre de filières")
+
+```
+
+-   Répartition du sexe du dirigeant/responsable de la PME par filière unique
+
+```{r}
+####************ pour une filiere *****************###
+# Subset des données pour les variables d'intérêt
+data_subset <- projet %>% filter(filiere==1) %>% select(sexe, nom_filiere)
+
+
+# Répartition du sexe du dirigeant/responsable de la PME par filière
+
+ggplot(data_subset, aes(x = nom_filiere, fill = sexe)) +
+  geom_bar(position = "fill") +
+  labs(x = "Filière_unique", y = "Pourcentage", fill = "Sexe du dirigeant") +
+  scale_fill_manual(values = c("#4C78A8", "#E45756"), labels = c("Homme", "Femme")) +
+  theme_minimal() +
+  labs(title = "Répartition du genre des dirigeants des PME en fonction du nombre de filières")
+```
+
+-   Répartition du sexe du dirigeant/responsable de la PME pour deux filières
+
+```{r}
+####************ pour deux filiere *****************###
+# Subset des données pour les variables d'intérêt
+data_subset <- projet %>% filter(filiere==2) %>% select(sexe, nom_filiere)
+
+
+# Répartition du sexe du dirigeant/responsable de la PME par filière
+ggplot(data_subset, aes(x = nom_filiere, fill = sexe)) +
+  geom_bar(position = "fill") +
+  labs(x = "groupe_Filière(2)", y = "Pourcentage", fill = "Sexe du dirigeant") +
+  scale_fill_manual(values = c("#4C78A8", "#E45756"), labels = c("Homme", "Femme")) +
+  theme_minimal()+
+  labs(title = "Répartition du genre des dirigeants des PMEen fonction des filieres")
+```
+
+-   Répartition du sexe du dirigeant/responsable de la PME pour plus de deux filières
+
+```{r}
+
+####************ pour plus de deux filiere *****************###
+# Subset des données pour les variables d'intérêt
+data_subset <- projet %>% filter(filiere==3 |filiere==4) %>% select(sexe, nom_filiere)
+# Répartition du sexe du dirigeant/responsable de la PME par filière
+ggplot(data_subset, aes(x = nom_filiere, fill = sexe)) +
+  geom_bar(position = "fill") +
+  labs(x = "groupe_Filière(au moins3)", y = "Pourcentage", fill = "Sexe du dirigeant") +
+  scale_fill_manual(values = c("#4C78A8", "#E45756"), labels = c("Homme", "Femme")) +
+  theme_minimal()+ 
+  labs(title = "Répartition du genre des dirigeants des PMEen fonction des filieres")
+```
+
+-   Analyse de l'âge du dirigeant/responsable de la PME (variable q24) dans chaque filière pour déterminer les tendances générationnelles. Analysez Propriétaire/locataire dans chaque filière
+
+```{r}
+
+# Répartition du sexe du dirigeant/responsable de la PME par filière
+ggplot(projet, aes(x = filiere, fill = q81)) +
+  geom_bar(position = "fill") +
+  labs(x = "Nombre de  Filière", y = "Pourcentage", fill = "Sexe du dirigeant") +
+  scale_fill_manual(values = c( "#E45756","#4C78A8"), labels = c("Locataire","Propriétaire")) +
+  theme_minimal()+
+  labs(title = "Répartition du genre des dirigeants des PMEen fonction des filieres")
+```
+
+## 3. Un peu de cartographie
+
+#### *3.1. Transformation le data.frame en données géographiques dont l'objet sera nommé projet_map.*
+
+```{r}
+
+
+# Création de l'objet projet_map avec des données géographiques
+projet_map <- projet %>%
+  st_as_sf(coords = c("gps_menlongitude", "gps_menlatitude"), crs = 4326)
+
+#Ceci provient du referentiel mondiale
+```
+
+#### *3.2. Réprésentation spatiale des PME suivant le sexe*
+
+-   Création de la carte spatiale des PME selon le sexe
+
+```{r}
+# Création de la carte spatiale des PME selon le sexe
+ggplot() +
+  geom_sf(data = projet_map, aes(color = sexe)) +
+  scale_color_manual(values = c( "pink","darkgreen")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "Sexe") +
+  theme_minimal()+
+  labs(title = "Répartition des PME selon le sexe du dirigeant")
+
+```
+
+-   Pour une meilleure presentation ajoutons la carte du senegal
+
+**Chargement des coordonnées géographiques de la région du pays**
+
+```{r,echo = FALSE}
+
+# Chargement des coordonnées géographiques de la région du pays
+occ_raw <- st_read(dsn = "data/sen.gpkg", stringsAsFactors = FALSE)
+
+occ <- st_transform(x = occ_raw, crs = 4326)
+
+OCCreg<-occ %>% 
+          select(adm1_id,adm1_name, adm0_id,adm0_name,geom )%>% 
+              group_by(adm1_id,adm1_name, adm0_id,adm0_name) %>% 
+                  summarise(sum())
+```
+
+**Création de la carte spatiale des PME selon le sexe et la région avec la région en arrière-plan**
+
+```{r}
+# Création de la carte spatiale des PME selon le sexe et la région avec la région en arrière-plan
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map, aes(color = sexe)) +
+  scale_color_manual(values = c("blue", "pink")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "Genre") +
+  theme_minimal()+theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon le genre du dirigeant")
+
+```
+
+#### *3.3. Faites une réprésentation spatiale des PME suivant le niveau d'instruction*
+
+```{r}
+
+# Création de la carte spatiale des PME selon le sexe
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map, aes(color = q25)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "niveau d'instruction") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon le niveau d'instruction du dirigeant")
+```
+
+#### **3.4. Analyse spatiale de choix**
+
+##### 3.4.1. Répartition géographiquedes PME selon le nombre de filières
+
+```{r}
+
+# répartition géographiquedes PME selon les filiere
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map, aes(color = nom_filiere)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "filiere") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon les filières")
+
+
+```
+
+-   Répartition géographiquedes PME qui font dans une seule culture
+
+```{r}
+# répartition géographiquedes PME qui font dans une seule culture
+projet_map1<-projet_map %>% filter(filiere==1) # filtre les PME qui font dans une seule filiere
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map1, aes(color = nom_filiere)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "filiere") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon les filières")
+
+
+```
+
+Commencons donc à filtrer notre carte\
+
+-   Répartition géographique des PME qui font dans deux culture\
+
+```{r}
+# répartition géographiquedes PME qui font dans deux  culture
+projet_map1<-projet_map %>% filter(filiere==2) # filtre les PME qui font dans deux filiere
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map1, aes(color = nom_filiere)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "filiere") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon les filières")
+
+```
+
+-   Répartition géographique des PME qui font dans trois cultures
+
+```{r}
+# répartition géographiquedes PME qui font dans trois  culture
+projet_map1<-projet_map %>% filter(filiere==3) # filtre les PME qui font dans trois filiere
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map1, aes(color = nom_filiere)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "filiere") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon les filières")
+
+```
+
+-   Répartition géographiquedes PME qui font dans quatre cultures
+
+```{r}
+
+# répartition géographiquedes PME qui font dans quatre  culture
+projet_map1<-projet_map %>% filter(filiere==4) # filtre les PME qui font dans quatre filiere
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +  # Carte de la région en arrière-plan
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2)+
+  coord_sf() +
+  geom_sf(data = projet_map1, aes(color = nom_filiere)) +
+  scale_fill_manual(values = c("#E45756", "#4C78A8","darkgreen","blue")) +  # Couleurs des catégories de sexe (à personnaliser)
+  labs(color = "filiere") +
+  theme_minimal()+
+  theme(panel.background = element_rect(fill = "azure",color=NA)) +
+  annotation_north_arrow(location = "tl", which_north = "true", style = north_arrow_orienteering)+
+  annotation_scale(location = "bl", width_hint = 0.2)+
+  labs(title = "Répartition géographique des PME selon les filières")
+```
+
+##### 3.4.2. Évaluez si les PME de chaque filière sont desservies par des routes bitumées et examinez l'état de ces routes.
+
+-   Répartition géographiquedes PME selon les filiere desservies par des routes bitumées
+
+```{r}
+# répartition géographiquedes PME selon les filiere desservies par des routes bitumées (variable q16)
+projet_map1<-projet_map %>% filter(filiere==1) # filtre les PME qui font dans une seule filiere
+
+
+# Création de la carte avec routes bitumées
+
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2) +
+  geom_sf(data = projet_map1, aes(fill = nom_filiere,shape= nom_filiere, color = q16), size = 4 )+
+  labs(title = "Répartition géographique des PME selon les filières et les routes",
+       color = "Approximitée d'une Route bitumée") +
+  theme_minimal() 
+
+
+```
+
+-   Création de la carte avec l'état des routes bitumées
+
+```{r}
+# Création de la carte avec l'état des routes bitumées
+
+projet_map1<-projet_map1 %>% filter(q16=="Oui")
+ggplot() +
+  geom_sf(data = OCCreg, color = "lightgray") +
+  geom_sf_label(data = OCCreg, aes(label = adm1_name), color = "black", size = 2) +
+  geom_sf(data = projet_map1, aes(fill = nom_filiere,shape= nom_filiere, color = q17) , size=4)+
+  labs(title = "Répartition géographique des PME selon les filières et les routes",
+       color = "Approximitée d'une Route bitumée") +
+  theme_minimal() 
+```
+
+# Partie 2
+
+Le fichier excel Base_Partie 2.xlsx contient un ensemble de données artificielles créé dans le cadre de ce projet. La première feuille contient des micro-données au niveau individuel des répondants à l'enquête, la deuxième feuille contient des données pour les districts dans lesquels les répondants de la première feuille ont été interrogés. La troisième feuille contient des explications sur les variables incluses dans toutes les feuilles précédentes.\
+\
+**Chargement de données**
+
+```{r}
+data <- read_excel("data/Base_Partie 2.xlsx", 
+     sheet = "data")
+
+
+district <- read_excel("data/Base_Partie 2.xlsx", 
+     sheet = "district")
+codebook <- read_excel("data/Base_Partie 2.xlsx", 
+     sheet = "codebook")
+```
+
+## 1. Nettoyage et gestion des données
+
+-   Renommation la variable "country_destination" en "destination" et définition les valeurs négatives comme manquantes.
+
+```{r}
+# Renommer les variables country_destination
+data <- data %>% 
+          mutate(country_destination=ifelse(country_destination>=0, country_destination,NA)) %>% 
+            rename(destination = country_destination)  
+  
+```
+
+-   Créer une nouvelle variable contenant des tranches d'âge de 5 ans en utilisant la variable "age".
+
+```{r}
+data<- data %>%  
+         mutate(age=ifelse(age==999, NA, age),
+                Age_group= cut(age,seq(14, by=5, length.out=7)))
+
+
+      
+tab11=data %>% 
+  select(Age_group) %>% 
+    tbl_summary() %>% 
+      bold_labels()
+
+tab11%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+-   Créer une nouvelle variable contenant le nombre d'entretiens réalisés par chaque agent recenseur.
+
+```{r}
+data<-data %>% 
+          mutate(enumerator=as.factor(enumerator))
+
+
+tab12=data %>% 
+    select(enumerator) %>% 
+            rename("Numero de l'agent recenseur"=enumerator) %>% 
+                tbl_summary(sort = list(everything() ~ "frequency")) %>% 
+                        bold_labels()
+
+tab12%>% bold_labels() %>% 
+  italicize_levels()  %>% 
+  modify_header(update = list( label ~ "**VARIABLE**", all_stat_cols(stat_0 = FALSE) ~ "**{level}** (n={n}, {style_percent(p)}%)"
+  )) %>%  as_flex_table() %>%
+  fontsize(size = 8) %>%
+  width(width = 1.65)
+```
+
+il apparait que se sont **les ressenceurs 4 et 20** qui ont le plus grand nombre de recensement soit **9 reccensements**
+
+-   Créer une nouvelle variable qui affecte aléatoirement chaque répondant à un groupe de traitement (1) ou de controle (0).
+
+```{r}
+data<-data %>% 
+          mutate(traitement=sample(c(0,1), 97, replace = TRUE))
+
+```
+
+• Fusionner la taille de la population de chaque district (feuille 2) avec l'ensemble de données (feuille 1) afin que toutes les personnes interrogées aient une valeur correspondante représentant la taille de la population du district dans lequel elles vivent.
+
+```{r}
+# jointure a gauche
+d<- data_merge(data, district, join = "left", id = district)
+```
+
+• Calculer la durée de l'entretien et indiquer la durée moyenne de l'entretien par enquêteur.
+
+```{r}
+#calcul de la duree
+d<-d %>% 
+     mutate(duree=endtime-starttime)
+
+#calcul de la duree moyenne par enqueteur
+
+d %>%
+  group_by(enumerator) %>% 
+     rename("Numero de l'agent recenseur"=enumerator) %>% 
+        summarise(dureemoy = mean(duree), nbre_enquete = n()) %>% 
+            kbl()%>% 
+              kable_paper(full_width = TRUE)
+
+```
+
+• Renommez toutes les variables de l'ensemble de données en ajoutant le préfixe "endline\_" à l'aide d'une boucle.
+
+```{r}
+#nom des colonnes
+colon<-colnames(d)
+ 
+
+# Nouveaux noms de variables avec le préfixe "endline_"
+new_col <- paste0("endline_", colon)
+
+# Renommage des variables à l'aide d'une boucle
+for (i in seq_along(colon)) {
+  colnames(d)[i] <- new_col[i]
+}
+```
+
+## 2. Analyse et visualisation des données
+
+• Créez un tableau récapitulatif contenant l'âge moyen et le nombre moyen d'enfants par district.
+
+```{r}
+data %>%
+  group_by(district) %>%
+     summarise(age_moyen = round(mean(age, na.rm=TRUE),2), 
+               enfants_moyen = round(mean(children_num, na.rm=TRUE),2))  %>% 
+          kbl()%>% 
+              kable_paper(full_width = TRUE)
+
+```
+
+• Testez si la différence d'âge entre les sexes est statistiquement significative au niveau de 5 %.
+
+```{r}
+#test d'égalité des variance
+mod <- anova(lm(age ~ sex, data))
+bind_rows(
+  broom::tidy(mod) 
+)%>%
+  kbl() %>%
+  kable_paper(full_width = TRUE) 
+
+
+# donc les varaince sont égale
+#test de student
+mod<-t.test(age ~ sex, data, var.equal = TRUE)
+bind_rows(
+  broom::tidy(mod) 
+)%>%
+  kbl() %>%
+  kable_paper(full_width = TRUE) 
+
+
+```
+
+• Créer un nuage de points de l'âge en fonction du nombre d'enfants
+
+```{r}
+ggplot(data, aes(x = age, y = children_num)) +
+  geom_point() +
+  labs(x = "Âge", y = "Nombre d'enfants")
+
+```
+
+• La variable "intention" indique si les migrants potentiels ont l'intention de migrer sur une échelle de 1 à 7. Estimez l'effet de l'appartenance au groupe de traitement sur l'intention de migrer.
+
+```{r}
+modele_traitement<-lm(intention ~ traitement-1, data)
+effet_traitement <- coef(modele_traitement)["traitement"]
+
+mod <- summary(modele_traitement)
+bind_rows(
+  broom::tidy(mod) 
+)%>%
+  kbl() %>%
+  kable_paper(full_width = TRUE) 
+
+
+
+```
+
+• Créez un tableau de régression avec 3 modèles. La variable de résultat est toujours "intention". Modèle A : Modèle vide - Effet du traitement sur les intentions. Modèle B : Effet du traitement sur les intentions en tenant compte de l'âge et du sexe. Modèle C : Identique au modèle B mais en contrôlant le district. Les résultats des trois modèles doivent être affichés dans un seul tableau.
+
+```{r}
+modele_a <- lm(intention ~ traitement-1, data)
+modele_b <- lm(intention ~ traitement -1+ age + sex, data )
+modele_c <- lm(intention ~ traitement -1+ age + sex + district, data)
+
+tableau_regression <- bind_rows(
+  broom::tidy(modele_a) ,
+  broom::tidy(modele_b) ,
+  broom::tidy(modele_c) 
+)%>%
+  mutate(
+    estimate = round(estimate, 3),
+    std.error = round(std.error, 3),
+    statistic = round(statistic, 3),
+    p.value = round(p.value, 3),
+    p_value_color = ifelse(p.value < 0.05, "green", "")
+  )
+
+
+tableau_regression %>%
+  select(-p_value_color) %>% 
+  kbl() %>%
+  kable_paper(full_width = TRUE) %>% 
+  group_rows(group_label ="Modèle A", start_row =1, end_row =2) %>%
+  group_rows(group_label ="Modèle B", start_row =3, end_row =5) %>%
+  group_rows(group_label ="Modèle C", start_row =6, end_row =8) %>%
+  kable_styling() %>%
+  column_spec(1, bold = TRUE) %>% 
+  column_spec(5, color = c(tableau_regression$p_value_color))
+```
